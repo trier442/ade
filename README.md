@@ -24,7 +24,7 @@
 
 세부 루브릭은 `config/rubric.json`에서 관리합니다.
 
-## 실행
+## 로컬 실행
 
 Node.js 22 이상이 필요합니다.
 
@@ -35,6 +35,30 @@ npm start
 ```
 
 브라우저에서 `http://localhost:3000`을 엽니다.
+
+## Render 배포
+
+저장소 루트의 `render.yaml`을 이용해 Blueprint 방식으로 배포할 수 있습니다.
+
+1. Render Dashboard에서 **New → Blueprint**를 선택합니다.
+2. GitHub 계정을 연결하고 `trier442/ade` 저장소를 선택합니다.
+3. Blueprint 이름은 `ade`로 지정합니다.
+4. Branch가 `main`인지 확인합니다.
+5. `OPENAI_API_KEY` 입력란에 실제 OpenAI API 키를 입력합니다.
+6. **Deploy Blueprint**를 실행합니다.
+7. 배포가 끝나면 생성된 `*.onrender.com` 주소로 접속합니다.
+
+현재 Blueprint 기본값:
+
+- Runtime: Node
+- Region: Singapore
+- Plan: Free (MVP 테스트용)
+- Build: `npm install`
+- Start: `npm start`
+- Health check: `/api/health`
+- `main` 커밋 시 자동 재배포
+
+> 실제 API 키는 `render.yaml`이나 GitHub 소스에 기록하지 않습니다. `OPENAI_API_KEY`는 Render의 비밀 환경변수로만 입력합니다.
 
 ## 환경 변수
 
@@ -61,12 +85,3 @@ MAX_UPLOAD_MB=100
 ## 개인정보 원칙
 
 MVP는 업로드된 원본 파일을 서버 디스크나 DB에 자동 저장하지 않습니다. 실제 학교·학원 운영 전에는 녹음 동의, 보관 기간, 접근 권한, 삭제 정책을 별도로 확정해야 합니다.
-
-## 다음 단계
-
-- 실제 웹 배포 환경 연결
-- OpenAI API 키를 서버 환경변수로 등록
-- 실제 토론 파일로 전사 정확도 시험
-- 학생별 평가표와 DOCX/PDF 출력
-- 평가 이력 DB와 로그인
-- 기준 토론 세트로 평가 일관성 검증
