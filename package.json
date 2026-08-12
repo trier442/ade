@@ -1,0 +1,15 @@
+{
+  "name": "ade",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "웹 기반 AI 토론 평가기 - 화자 분리 전사와 증거 기반 토론 루브릭 평가",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "check": "node --check server.mjs && node --check public/app.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
