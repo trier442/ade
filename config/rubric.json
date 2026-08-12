@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "title": "토론 평가 루브릭",
+  "totalMaxScore": 100,
+  "gradeBands": [
+    { "grade": "A", "min": 90, "label": "매우 우수" },
+    { "grade": "B", "min": 80, "label": "우수" },
+    { "grade": "C", "min": 70, "label": "보통" },
+    { "grade": "D", "min": 60, "label": "미흡" },
+    { "grade": "E", "min": 0, "label": "매우 미흡" }
+  ],
+  "sections": [
+    {
+      "id": "opening",
+      "name": "입론",
+      "maxScore": 40,
+      "criteria": [
+        { "id": "opening_topic_position", "name": "논제 이해 및 입장 명확성", "maxScore": 8, "description": "논제의 핵심을 정확히 이해하고 찬반 입장을 명확하게 설정했는가" },
+        { "id": "opening_reasoning", "name": "논거의 타당성", "maxScore": 8, "description": "주장을 뒷받침하는 이유가 논리적이며 비약이나 모순이 없는가" },
+        { "id": "opening_evidence", "name": "근거·사례 활용", "maxScore": 8, "description": "통계·연구·사례·자료를 주장과 적절하게 연결하여 활용했는가" },
+        { "id": "opening_structure", "name": "논증 구조", "maxScore": 8, "description": "주장-이유-근거-결론의 연결이 체계적인가" },
+        { "id": "opening_delivery", "name": "표현·전달", "maxScore": 8, "description": "핵심을 분명하고 효율적으로 전달했는가. 전사문으로 확인할 수 없는 음성적 요소는 추정하지 않는다" }
+      ]
+    },
+    {
+      "id": "cross",
+      "name": "교차조사",
+      "maxScore": 35,
+      "criteria": [
+        { "id": "cross_core_issue", "name": "핵심 쟁점에 대한 질문", "maxScore": 7, "description": "사소한 부분이 아니라 상대 논증의 핵심 전제·근거·인과관계·기준을 질문했는가" },
+        { "id": "cross_precision", "name": "질문의 정확성", "maxScore": 7, "description": "질문이 구체적이며 한 번에 하나의 쟁점을 분명히 겨냥했는가" },
+        { "id": "cross_pressure", "name": "논리적 압박·논박", "maxScore": 7, "description": "상대 주장의 모순, 근거 부족, 일반화, 인과 오류, 기준 불명확 등을 효과적으로 드러냈는가" },
+        { "id": "cross_followup", "name": "후속 질문 및 경청", "maxScore": 7, "description": "상대 답변을 실제로 활용하여 후속 질문을 이어 가며 쟁점을 심화했는가" },
+        { "id": "cross_defense", "name": "답변 및 방어 능력", "maxScore": 7, "description": "자기 측에 대한 질문에 회피하지 않고 논리적으로 답하며 논증을 방어했는가" }
+      ]
+    },
+    {
+      "id": "closing",
+      "name": "최종변론",
+      "maxScore": 25,
+      "criteria": [
+        { "id": "closing_clash_summary", "name": "핵심 쟁점 정리", "maxScore": 5, "description": "토론에서 실제로 충돌한 핵심 쟁점을 정확하게 정리했는가" },
+        { "id": "closing_rebuttal", "name": "상대 논증에 대한 최종 반박", "maxScore": 5, "description": "상대의 주요 논거에 대해 토론 중 제기된 내용을 바탕으로 효과적으로 반박했는가" },
+        { "id": "closing_defense", "name": "자기 측 논증 방어", "maxScore": 5, "description": "교차조사와 반박에서 제기된 약점을 보완하고 자기 측 논증을 유지했는가" },
+        { "id": "closing_weighing", "name": "비교·형량", "maxScore": 5, "description": "양측 주장과 근거를 중요도, 범위, 발생 가능성, 지속성 등의 기준으로 비교했는가" },
+        { "id": "closing_persuasion", "name": "최종 설득력", "maxScore": 5, "description": "새로운 핵심 논거를 무리하게 추가하지 않고 기존 토론을 종합하여 설득력 있는 결론을 이끌었는가" }
+      ]
+    }
+  ]
+}
