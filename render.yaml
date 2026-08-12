@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: ade
+    runtime: node
+    region: singapore
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_TRANSCRIBE_MODEL
+        value: gpt-4o-transcribe-diarize
+      - key: OPENAI_EVAL_MODEL
+        value: gpt-5
+      - key: MAX_UPLOAD_MB
+        value: "100"
