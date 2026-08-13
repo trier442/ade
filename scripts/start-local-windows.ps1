@@ -4,7 +4,12 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ToolsDir = Join-Path $RepoRoot ".local-tools"
 $WhisperDir = Join-Path $ToolsDir "whisper"
 $ModelsDir = Join-Path $ToolsDir "models"
+$LogDir = Join-Path $ToolsDir "logs"
 $EnvLocal = Join-Path $RepoRoot ".env.local"
+
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$WhisperOut = Join-Path $LogDir "whisper-server.out.log"
+$WhisperErr = Join-Path $LogDir "whisper-server.err.log"
 
 if (-not (Test-Path $EnvLocal)) {
   throw ".env.local was not found. Run scripts\setup-local-windows.ps1 first."
@@ -37,33 +42,42 @@ $whisperAlreadyRunning = Test-WhisperServer
 $whisperProc = $null
 
 if (-not $whisperAlreadyRunning) {
+  Remove-Item $WhisperOut,$WhisperErr -Force -ErrorAction SilentlyContinue
+
   $whisperArgs = @(
     "-m", "`"$($Model.FullName)`"",
     "--host", "127.0.0.1",
     "--port", "8080",
     "-l", "ko",
-    "-nlp"
+    "-nlp",
+    "-ng"
   )
 
   if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
     $whisperArgs += "--convert"
   }
 
-  Write-Host "Starting Whisper server..." -ForegroundColor Cyan
+  Write-Host "Starting Whisper server in CPU-safe mode..." -ForegroundColor Cyan
   $whisperProc = Start-Process -FilePath $WhisperServer.FullName `
     -ArgumentList ($whisperArgs -join " ") `
     -WorkingDirectory $WhisperServer.DirectoryName `
+    -RedirectStandardOutput $WhisperOut `
+    -RedirectStandardError $WhisperErr `
     -PassThru
 
   $ready = $false
-  for ($i = 0; $i -lt 90; $i++) {
+  for ($i = 0; $i -lt 120; $i++) {
     Start-Sleep -Seconds 1
-    if (Test-WhisperServer) {
-      $ready = $true
-      break
-    }
     if ($whisperProc.HasExited) {
       break
+    }
+    if (Test-WhisperServer) {
+      # Make sure the process remains alive after the first successful probe.
+      Start-Sleep -Seconds 3
+      if (-not $whisperProc.HasExited -and (Test-WhisperServer)) {
+        $ready = $true
+        break
+      }
     }
   }
 
@@ -71,7 +85,9 @@ if (-not $whisperAlreadyRunning) {
     if ($whisperProc -and -not $whisperProc.HasExited) {
       Stop-Process -Id $whisperProc.Id -Force
     }
-    throw "Whisper server did not become ready."
+    Write-Host "Whisper stderr log:" -ForegroundColor Yellow
+    if (Test-Path $WhisperErr) { Get-Content $WhisperErr -Tail 60 }
+    throw "Whisper server did not remain ready. See .local-tools\logs\whisper-server.err.log"
   }
 }
 
@@ -81,6 +97,7 @@ try {
   throw "Cannot connect to Ollama API. Start Ollama and try again."
 }
 
+Write-Host "Whisper server: http://127.0.0.1:8080" -ForegroundColor Green
 Write-Host "ADE local mode: http://localhost:3000" -ForegroundColor Green
 Start-Process "http://localhost:3000"
 
