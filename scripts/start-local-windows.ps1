@@ -75,7 +75,8 @@ Start-Process "http://localhost:3000"
 
 Push-Location $RepoRoot
 try {
-  npm start
+  # PowerShell 실행 정책에 의해 npm.ps1이 차단될 수 있으므로 npm.cmd를 직접 호출합니다.
+  & npm.cmd start
 } finally {
   Pop-Location
   if ($whisperProc -and -not $whisperProc.HasExited) {
