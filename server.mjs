@@ -113,7 +113,8 @@ async function localHealth() {
   let ollama = false;
   let ollamaModels = [];
   try {
-    const r = await fetchTimed(`${WHISPER_CPP_URL}/health`);
+    // whisper-server는 모델 로딩이 끝난 뒤 루트 경로에 내장 HTML을 제공한다.
+    const r = await fetchTimed(`${WHISPER_CPP_URL}/`);
     whisper = r.ok;
   } catch {}
   try {
