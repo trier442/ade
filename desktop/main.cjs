@@ -98,7 +98,12 @@ function downloadModel() {
     modelDownloadProcess = spawn(executable, args, {
       windowsHide: true,
       shell: false,
-      env: { ...process.env, PYTHONUTF8: '1', HF_HUB_DISABLE_SYMLINKS_WARNING: '1' },
+      env: {
+        ...process.env,
+        PYTHONUTF8: '1',
+        HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
+        HF_HUB_DISABLE_XET: '1',
+      },
     });
 
     let stderr = '';
@@ -124,8 +129,6 @@ function downloadModel() {
           const event = JSON.parse(value);
           emitModelProgress(event);
         } catch {
-          // Hugging Face prints progress bars to stderr. Keep the UI indeterminate
-          // and expose only a short sanitized status message.
           const cleaned = value.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '').slice(-240);
           if (cleaned) emitModelProgress({ stage: 'downloading', message: cleaned });
         }
