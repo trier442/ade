@@ -1,0 +1,53 @@
+appId: kr.co.ade.desktop
+productName: ADE 토론 평가기
+copyright: Copyright © ADE
+asar: true
+npmRebuild: false
+
+directories:
+  output: dist-desktop
+  buildResources: build
+
+files:
+  - desktop/**/*
+  - package.json
+
+extraResources:
+  - from: server.mjs
+    to: app/server.mjs
+  - from: public
+    to: app/public
+  - from: config
+    to: app/config
+  - from: scripts
+    to: app/scripts
+    filter:
+      - "**/*"
+  - from: runtime
+    to: runtime
+    filter:
+      - "**/*"
+
+win:
+  executableName: ADE
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: "ADE-${version}-${arch}-${target}.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ADE 토론 평가기
+  uninstallDisplayName: ADE 토론 평가기
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: "ADE-Portable-${version}-${arch}.${ext}"
