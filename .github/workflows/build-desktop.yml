@@ -22,6 +22,10 @@ on:
       - "electron-builder.yml"
       - ".github/workflows/build-desktop.yml"
 
+concurrency:
+  group: ade-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
