@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, dialog } = require('electron');
 const { spawn } = require('node:child_process');
 const net = require('node:net');
 const path = require('node:path');
@@ -11,6 +11,12 @@ function appRoot() {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'app')
     : path.resolve(__dirname, '..');
+}
+
+function runtimeRoot() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'runtime')
+    : path.resolve(__dirname, '..', 'runtime');
 }
 
 function reservePort() {
@@ -47,8 +53,11 @@ async function waitForServer(port, timeoutMs = 60_000) {
 
 function startBackend(port) {
   const root = appRoot();
+  const runtime = runtimeRoot();
   const serverFile = path.join(root, 'server.mjs');
   const shimFile = path.join(root, 'scripts', 'local-fetch-shim.mjs');
+  const transcriber = path.join(runtime, 'transcriber', 'ade-transcriber.exe');
+  const whisperModel = path.join(runtime, 'models', 'faster-whisper-large-v3');
 
   const args = ['--import', shimFile, serverFile];
   const env = {
@@ -56,6 +65,11 @@ function startBackend(port) {
     ELECTRON_RUN_AS_NODE: '1',
     ADE_DESKTOP: '1',
     ADE_RESOURCE_ROOT: process.resourcesPath,
+    ADE_RUNTIME_ROOT: runtime,
+    ADE_USER_DATA: app.getPath('userData'),
+    ADE_TRANSCRIBER_EXE: transcriber,
+    ADE_WHISPER_MODEL: whisperModel,
+    DEFAULT_PROVIDER: 'local',
     PORT: String(port),
   };
 
@@ -123,8 +137,12 @@ if (!hasLock) {
     mainWindow.focus();
   });
 
-  app.whenReady().then(createWindow).catch(error => {
+  app.whenReady().then(createWindow).catch(async error => {
     console.error(error);
+    dialog.showErrorBox(
+      'ADE 실행 오류',
+      `ADE 백엔드를 시작하지 못했습니다.\n\n${error.message}`,
+    );
     app.quit();
   });
 }
