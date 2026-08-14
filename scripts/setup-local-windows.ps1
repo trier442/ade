@@ -1,7 +1,7 @@
 param(
   [string]$OllamaModel = "qwen3:8b",
   [ValidateSet("tiny","base","small","medium","large-v3-turbo")]
-  [string]$WhisperModel = "small"
+  [string]$WhisperModel = "large-v3-turbo"
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +13,7 @@ $WhisperDir = Join-Path $ToolsDir "whisper"
 $ModelsDir = Join-Path $ToolsDir "models"
 $ZipPath = Join-Path $ToolsDir "whisper-win.zip"
 $ModelPath = Join-Path $ModelsDir "ggml-$WhisperModel.bin"
+$VadPath = Join-Path $ModelsDir "ggml-silero-v6.2.0.bin"
 
 New-Item -ItemType Directory -Force -Path $ToolsDir,$WhisperDir,$ModelsDir | Out-Null
 
@@ -36,15 +37,15 @@ if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
   exit 2
 }
 
-Write-Host "[1/3] Preparing Ollama model: $OllamaModel"
+Write-Host "[1/4] Preparing Ollama model: $OllamaModel"
 & ollama pull $OllamaModel
 if ($LASTEXITCODE -ne 0) {
   throw "Ollama model download failed."
 }
 
-$WhisperServer = Get-ChildItem $WhisperDir -Recurse -Filter "whisper-server.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $WhisperServer) {
-  Write-Host "[2/3] Downloading latest whisper.cpp Windows x64 binary"
+$WhisperCli = Get-ChildItem $WhisperDir -Recurse -Filter "whisper-cli.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $WhisperCli) {
+  Write-Host "[2/4] Downloading latest whisper.cpp Windows x64 binary"
   $release = Invoke-RestMethod -Headers @{ "User-Agent" = "ADE-local-setup" } -Uri "https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest"
   $asset = $release.assets | Where-Object { $_.name -eq "whisper-bin-x64.zip" } | Select-Object -First 1
   if (-not $asset) {
@@ -58,15 +59,23 @@ if (-not $WhisperServer) {
   Expand-Archive -Path $ZipPath -DestinationPath $WhisperDir -Force
   Remove-Item $ZipPath -Force
 } else {
-  Write-Host "[2/3] whisper.cpp binary already installed"
+  Write-Host "[2/4] whisper.cpp binary already installed"
 }
 
 if (-not (Test-Path $ModelPath)) {
-  Write-Host "[3/3] Downloading Whisper multilingual model: $WhisperModel"
+  Write-Host "[3/4] Downloading Whisper multilingual model: $WhisperModel"
   $modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WhisperModel.bin?download=true"
   Invoke-WebRequest -UseBasicParsing -Uri $modelUrl -OutFile $ModelPath
 } else {
-  Write-Host "[3/3] Whisper model already installed: $WhisperModel"
+  Write-Host "[3/4] Whisper model already installed: $WhisperModel"
+}
+
+if (-not (Test-Path $VadPath)) {
+  Write-Host "[4/4] Downloading Silero VAD model"
+  $vadUrl = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin?download=true"
+  Invoke-WebRequest -UseBasicParsing -Uri $vadUrl -OutFile $VadPath
+} else {
+  Write-Host "[4/4] Silero VAD model already installed"
 }
 
 $envPath = Join-Path $RepoRoot ".env.local"
@@ -81,5 +90,6 @@ MAX_UPLOAD_MB=100
 
 Write-Host ""
 Write-Host "Setup complete." -ForegroundColor Green
+Write-Host "Whisper model: $WhisperModel" -ForegroundColor Green
 Write-Host "Run ADE local mode with:"
 Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\start-local-windows.ps1" -ForegroundColor Green
