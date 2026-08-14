@@ -5,9 +5,9 @@
   "type": "module",
   "description": "웹 기반 AI 토론 평가기 - 화자 분리 전사와 증거 기반 토론 루브릭 평가",
   "scripts": {
-    "start": "node server.mjs",
-    "dev": "node --watch server.mjs",
-    "check": "node --check server.mjs && node --check public/app.js"
+    "start": "node --import=./scripts/local-fetch-shim.mjs server.mjs",
+    "dev": "node --watch --import=./scripts/local-fetch-shim.mjs server.mjs",
+    "check": "node --check server.mjs && node --check public/app.js && node --check scripts/local-fetch-shim.mjs"
   },
   "engines": {
     "node": ">=22"
