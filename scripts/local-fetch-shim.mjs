@@ -41,12 +41,6 @@ async function largestModel() {
   return rows[0] || null;
 }
 
-async function vadModel() {
-  if (!existsSync(MODELS_DIR)) return null;
-  const names = (await readdir(MODELS_DIR)).filter(n => /^ggml-silero-.*\.bin$/i.test(n));
-  return names.length ? join(MODELS_DIR, names.sort().at(-1)) : null;
-}
-
 function parseSrtTime(v) {
   const m = String(v).trim().match(/(\d+):(\d+):(\d+)[,.](\d+)/);
   if (!m) return 0;
@@ -103,8 +97,7 @@ async function runtime() {
   if (runtimeCache) return runtimeCache;
   const cli = await findFile(WHISPER_DIR, 'whisper-cli.exe');
   const model = await largestModel();
-  const vad = await vadModel();
-  runtimeCache = { cli, model, vad };
+  runtimeCache = { cli, model };
   return runtimeCache;
 }
 
@@ -119,22 +112,29 @@ async function directTranscribe(file) {
   try {
     await writeFile(input, Buffer.from(await file.arrayBuffer()));
     const threads = Math.max(4, Math.min(12, Math.max(1, availableParallelism() - 1)));
+    const beamSize = String(Math.max(5, Math.min(10, Number(process.env.WHISPER_BEAM_SIZE || 8))));
+
+    // Accuracy-first defaults for classroom debate recordings:
+    // - no VAD by default: quiet student speech is less likely to be cut off
+    // - no fixed prompt: prevents topic-word hallucination in silence/noise
+    // - no suppress-nst: preserves ambiguous but potentially meaningful speech
     const args = [
       '-m', rt.model.path,
       '-f', input,
       '-l', 'ko',
       '-t', String(threads),
-      '-bs', '5',
+      '-bs', beamSize,
       '-bo', '5',
       '-sow',
-      '-sns',
       '-ng',
       '-osrt',
       '-of', outputBase,
       '-np',
-      '--prompt', '한국어 토론 수행평가. 찬성, 반대, 입론, 교차조사, 최종변론, 근거, 반박, 정복지, 문화, 통일, 동화 정책.',
     ];
-    if (rt.vad) args.push('--vad', '-vm', rt.vad, '-vsd', '450', '-vp', '120');
+
+    const customPrompt = String(process.env.WHISPER_PROMPT || '').trim();
+    if (customPrompt) args.push('--prompt', customPrompt.slice(0, 600));
+
     await run(rt.cli, args);
     const srt = await readFile(`${outputBase}.srt`, 'utf8');
     const segments = parseSrt(srt);
@@ -142,7 +142,12 @@ async function directTranscribe(file) {
       text: segments.map(s => s.text).join(' '),
       duration: segments.length ? segments.at(-1).end : 0,
       segments,
-      runtime: { model: rt.model.name, vad: rt.vad ? rt.vad.split(/[\\/]/).at(-1) : null },
+      runtime: {
+        model: rt.model.name,
+        vad: null,
+        beamSize: Number(beamSize),
+        profile: 'accuracy-conservative',
+      },
     };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
@@ -171,7 +176,7 @@ globalThis.fetch = async function adeFetch(input, init = {}) {
         ok: Boolean(rt.cli && rt.model),
         service: 'ade-direct-whisper',
         model: rt.model?.name || null,
-        vad: rt.vad ? rt.vad.split(/[\\/]/).at(-1) : null,
+        profile: 'accuracy-conservative',
       });
     }
 
@@ -190,4 +195,4 @@ globalThis.fetch = async function adeFetch(input, init = {}) {
   }
 };
 
-console.log('[ADE] Direct Whisper CLI integration enabled.');
+console.log('[ADE] Direct Whisper CLI integration enabled (accuracy-conservative profile).');
