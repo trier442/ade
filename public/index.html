@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ADE | AI 토론 평가기</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/desktop.css">
 </head>
 <body>
 <header>
@@ -48,7 +49,7 @@
 
     <div id="localGuide" class="localGuide hidden">
       <b>무료 로컬 모드</b>
-      <span>Whisper.cpp로 음성을 전사하고 Ollama의 로컬 모델로 평가합니다. API 사용료가 없습니다.</span>
+      <span>Faster-Whisper로 음성을 전사하고 로컬 평가 엔진으로 분석합니다. 외부 전사 API 사용료가 없습니다.</span>
     </div>
 
     <div class="grid">
@@ -81,7 +82,7 @@
         <span id="fileName">선택된 파일 없음</span>
       </div>
       <div class="record">
-        <b>브라우저에서 직접 녹음</b>
+        <b>프로그램에서 직접 녹음</b>
         <p id="timer">00:00</p>
         <div>
           <button id="record" class="primary">● 녹음 시작</button>
@@ -105,7 +106,7 @@
 
     <div id="speakerMap" class="speakerMap"></div>
     <div id="manualHint" class="manualHint hidden">
-      무료 로컬 전사에서는 각 발언 구간의 화자를 직접 확인합니다. 찬성·반대·사회자 중 실제 화자를 지정하고, 오인식된 문장은 바로 수정할 수 있습니다.
+      각 발언 구간의 화자를 확인해 찬성·반대·사회자로 지정하세요. 오인식된 문장은 바로 수정할 수 있습니다.
     </div>
 
     <div id="segments" class="segments">
@@ -136,6 +137,7 @@
 
 <footer>ADE · 입론 40점 · 교차조사 35점 · 최종변론 25점</footer>
 <div id="toast" class="toast hidden"></div>
+<script src="/desktop-runtime.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
