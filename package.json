@@ -9,7 +9,7 @@
     "start": "node --import=./scripts/local-fetch-shim.mjs server.mjs",
     "dev": "node --watch --import=./scripts/local-fetch-shim.mjs server.mjs",
     "desktop": "electron .",
-    "check": "node --check server.mjs && node --check public/app.js && node --check scripts/local-fetch-shim.mjs && node --check desktop/main.cjs && node --check desktop/preload.cjs",
+    "check": "node --check server.mjs && node --check public/desktop-runtime.js && node --check public/app.js && node --check scripts/local-fetch-shim.mjs && node --check desktop/main.cjs && node --check desktop/preload.cjs",
     "build:transcriber": "powershell -ExecutionPolicy Bypass -File ./scripts/desktop/build-transcriber.ps1",
     "download:model": "powershell -ExecutionPolicy Bypass -File ./scripts/desktop/download-model-pack.ps1",
     "dist:desktop": "electron-builder --win nsis portable",
