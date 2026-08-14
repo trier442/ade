@@ -37,9 +37,9 @@ win:
     - target: portable
       arch:
         - x64
-  artifactName: "ADE-${version}-${arch}-${target}.${ext}"
 
 nsis:
+  artifactName: "ADE-Setup-${version}-${arch}.${ext}"
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
