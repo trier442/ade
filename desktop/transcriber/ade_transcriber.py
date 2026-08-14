@@ -30,6 +30,7 @@ def self_test() -> int:
         import av  # noqa: F401
         import ctranslate2
         import faster_whisper
+        import huggingface_hub  # noqa: F401
 
         result = {
             "ok": True,
@@ -38,6 +39,7 @@ def self_test() -> int:
             "faster_whisper": package_version("faster-whisper"),
             "ctranslate2": package_version("ctranslate2"),
             "av": package_version("av"),
+            "huggingface_hub": package_version("huggingface-hub"),
             "cuda_devices": int(ctranslate2.get_cuda_device_count()),
             "module": str(Path(faster_whisper.__file__).resolve()),
         }
@@ -46,6 +48,47 @@ def self_test() -> int:
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
         return 1
+
+
+def download_model(args: argparse.Namespace) -> dict[str, Any]:
+    from huggingface_hub import snapshot_download
+
+    output = Path(args.model_output).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    write_event(
+        "model_download_started",
+        repository=args.model_repo,
+        revision=args.model_revision,
+        output=str(output),
+    )
+
+    started = time.perf_counter()
+    path = snapshot_download(
+        repo_id=args.model_repo,
+        revision=args.model_revision,
+        local_dir=str(output),
+        max_workers=max(1, min(8, args.download_workers)),
+    )
+
+    required = ["config.json", "model.bin", "tokenizer.json"]
+    missing = [name for name in required if not (output / name).is_file()]
+    if missing:
+        raise RuntimeError(f"Downloaded model pack is incomplete: {', '.join(missing)}")
+
+    manifest = {
+        "ok": True,
+        "engine": "faster-whisper",
+        "repository": args.model_repo,
+        "revision": args.model_revision,
+        "path": str(Path(path).resolve()),
+        "elapsed_seconds": round(time.perf_counter() - started, 3),
+    }
+    (output / "ade-model.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    write_event("model_download_complete", **manifest)
+    return manifest
 
 
 def choose_runtime(requested_device: str, requested_compute_type: str) -> tuple[str, str]:
@@ -93,12 +136,19 @@ def profile_options(profile: str) -> dict[str, Any]:
     }
 
 
+def safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def serialize_word(word: Any) -> dict[str, Any]:
     return {
-        "start": round(float(word.start), 3) if word.start is not None else None,
-        "end": round(float(word.end), 3) if word.end is not None else None,
+        "start": round(safe_float(word.start), 3) if word.start is not None else None,
+        "end": round(safe_float(word.end), 3) if word.end is not None else None,
         "word": str(word.word),
-        "probability": round(float(word.probability), 5) if word.probability is not None else None,
+        "probability": round(safe_float(word.probability), 5) if word.probability is not None else None,
     }
 
 
@@ -106,14 +156,14 @@ def serialize_segment(index: int, segment: Any) -> dict[str, Any]:
     words = [serialize_word(word) for word in (segment.words or [])]
     return {
         "id": f"fw_{index + 1}",
-        "start": round(float(segment.start), 3),
-        "end": round(float(segment.end), 3),
+        "start": round(safe_float(segment.start), 3),
+        "end": round(safe_float(segment.end), 3),
         "speaker": "미지정",
         "text": str(segment.text).strip(),
         "words": words,
-        "avg_logprob": round(float(getattr(segment, "avg_logprob", 0.0)), 5),
-        "no_speech_prob": round(float(getattr(segment, "no_speech_prob", 0.0)), 5),
-        "compression_ratio": round(float(getattr(segment, "compression_ratio", 0.0)), 5),
+        "avg_logprob": round(safe_float(getattr(segment, "avg_logprob", 0.0)), 5),
+        "no_speech_prob": round(safe_float(getattr(segment, "no_speech_prob", 0.0)), 5),
+        "compression_ratio": round(safe_float(getattr(segment, "compression_ratio", 0.0)), 5),
     }
 
 
@@ -196,9 +246,9 @@ def transcribe(args: argparse.Namespace) -> dict[str, Any]:
             )
 
     elapsed = time.perf_counter() - started
-    duration = float(getattr(info, "duration", 0.0) or 0.0)
+    duration = safe_float(getattr(info, "duration", 0.0))
     if duration <= 0 and segments:
-        duration = float(segments[-1]["end"])
+        duration = safe_float(segments[-1]["end"])
 
     return {
         "ok": True,
@@ -210,7 +260,7 @@ def transcribe(args: argparse.Namespace) -> dict[str, Any]:
         "compute_type": compute_type,
         "profile": args.profile,
         "language": str(getattr(info, "language", args.language)),
-        "language_probability": round(float(getattr(info, "language_probability", 0.0)), 5),
+        "language_probability": round(safe_float(getattr(info, "language_probability", 0.0)), 5),
         "duration": round(duration, 3),
         "elapsed_seconds": round(elapsed, 3),
         "text": " ".join(item["text"] for item in segments).strip(),
@@ -221,6 +271,11 @@ def transcribe(args: argparse.Namespace) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="ADE offline Faster-Whisper transcription worker")
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--download-model", action="store_true")
+    parser.add_argument("--model-repo", default="Systran/faster-whisper-large-v3")
+    parser.add_argument("--model-revision", default="main")
+    parser.add_argument("--model-output")
+    parser.add_argument("--download-workers", type=int, default=4)
     parser.add_argument("--input")
     parser.add_argument("--output")
     parser.add_argument("--model")
@@ -244,13 +299,20 @@ def main() -> int:
     args = parser.parse_args()
     if args.self_test:
         return self_test()
-    if not args.input or not args.output or not args.model:
-        parser.error("--input, --output and --model are required unless --self-test is used")
-
-    output_path = Path(args.output).resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
+        if args.download_model:
+            if not args.model_output:
+                parser.error("--model-output is required with --download-model")
+            result = download_model(args)
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
+
+        if not args.input or not args.output or not args.model:
+            parser.error("--input, --output and --model are required for transcription")
+
+        output_path = Path(args.output).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         result = transcribe(args)
         output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         write_event("complete", output=str(output_path), segments=len(result["segments"]))
@@ -262,7 +324,10 @@ def main() -> int:
             "type": type(exc).__name__,
             "traceback": traceback.format_exc(),
         }
-        output_path.write_text(json.dumps(error, ensure_ascii=False, indent=2), encoding="utf-8")
+        if args.output:
+            output_path = Path(args.output).resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(error, ensure_ascii=False, indent=2), encoding="utf-8")
         write_event("error", message=str(exc), error_type=type(exc).__name__)
         return 1
 
