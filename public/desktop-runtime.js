@@ -5,6 +5,7 @@
 
   const nativeFetch = window.fetch.bind(window);
   let originalAudioFile = null;
+  let localEvaluationReady = false;
 
   function participantSummary() {
     return [...document.querySelectorAll('.person')]
@@ -35,6 +36,24 @@
     if (!input) return;
     input.addEventListener('change', event => {
       originalAudioFile = event.target?.files?.[0] || null;
+    }, true);
+  }
+
+  function installEvaluationGuard() {
+    const button = document.querySelector('#evaluateBtn');
+    if (!button) return;
+    button.addEventListener('click', event => {
+      const provider = document.querySelector('#provider')?.value;
+      if (provider === 'local' && !localEvaluationReady) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const toast = document.querySelector('#toast');
+        if (toast) {
+          toast.textContent = '설치형 전사 엔진은 준비되었습니다. 로컬 평가 엔진은 다음 개발 단계에서 프로그램에 내장됩니다.';
+          toast.classList.remove('hidden');
+          setTimeout(() => toast.classList.add('hidden'), 5000);
+        }
+      }
     }, true);
   }
 
@@ -80,9 +99,9 @@
     if (!data?.providers?.local) return response;
 
     const local = data.providers.local;
-    local.evaluationReady = Boolean(local.ollama);
-    // The desktop transcription worker and evaluation engine are independent.
-    // Allow transcription whenever the packaged Faster-Whisper worker is ready.
+    localEvaluationReady = Boolean(local.ollama);
+    local.evaluationReady = localEvaluationReady;
+    // Transcription and evaluation are independent in the desktop build.
     local.ready = Boolean(local.whisper);
     local.desktop = true;
 
@@ -109,5 +128,6 @@
   };
 
   installFileCapture();
+  installEvaluationGuard();
   decorateDesktop();
 })();
