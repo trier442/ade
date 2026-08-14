@@ -1,11 +1,16 @@
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const { spawn } = require('node:child_process');
+const { existsSync } = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
+
+const MODEL_REPOSITORY = 'Systran/faster-whisper-large-v3';
+const MODEL_FOLDER = 'faster-whisper-large-v3';
 
 let mainWindow = null;
 let serverProcess = null;
 let serverPort = null;
+let modelDownloadProcess = null;
 
 function appRoot() {
   return app.isPackaged
@@ -17,6 +22,135 @@ function runtimeRoot() {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'runtime')
     : path.resolve(__dirname, '..', 'runtime');
+}
+
+function transcriberPath() {
+  return path.join(runtimeRoot(), 'transcriber', 'ade-transcriber.exe');
+}
+
+function bundledModelPath() {
+  return path.join(runtimeRoot(), 'models', MODEL_FOLDER);
+}
+
+function userModelPath() {
+  return path.join(app.getPath('userData'), 'models', MODEL_FOLDER);
+}
+
+function modelReady(modelPath) {
+  return Boolean(
+    modelPath
+    && existsSync(path.join(modelPath, 'config.json'))
+    && existsSync(path.join(modelPath, 'model.bin'))
+    && existsSync(path.join(modelPath, 'tokenizer.json'))
+  );
+}
+
+function installedModelPath() {
+  if (modelReady(userModelPath())) return userModelPath();
+  if (modelReady(bundledModelPath())) return bundledModelPath();
+  return userModelPath();
+}
+
+function modelStatus() {
+  const executable = transcriberPath();
+  const userModel = userModelPath();
+  const bundledModel = bundledModelPath();
+  const selectedModel = installedModelPath();
+  return {
+    engineInstalled: existsSync(executable),
+    modelInstalled: modelReady(selectedModel),
+    downloading: Boolean(modelDownloadProcess),
+    executable,
+    modelPath: selectedModel,
+    userModelPath: userModel,
+    bundledModelPath: bundledModel,
+    repository: MODEL_REPOSITORY,
+  };
+}
+
+function emitModelProgress(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('ade:model-progress', payload);
+}
+
+function downloadModel() {
+  if (modelDownloadProcess) {
+    throw new Error('모델을 이미 설치하고 있습니다.');
+  }
+
+  const executable = transcriberPath();
+  if (!existsSync(executable)) {
+    throw new Error('ADE 전사 엔진이 설치되지 않았습니다. 프로그램을 다시 설치해 주세요.');
+  }
+  if (modelReady(userModelPath()) || modelReady(bundledModelPath())) {
+    return Promise.resolve(modelStatus());
+  }
+
+  return new Promise((resolve, reject) => {
+    const args = [
+      '--download-model',
+      '--model-repo', MODEL_REPOSITORY,
+      '--model-output', userModelPath(),
+      '--download-workers', '4',
+    ];
+
+    emitModelProgress({ stage: 'starting', message: 'large-v3 모델 설치를 시작합니다.' });
+    modelDownloadProcess = spawn(executable, args, {
+      windowsHide: true,
+      shell: false,
+      env: { ...process.env, PYTHONUTF8: '1', HF_HUB_DISABLE_SYMLINKS_WARNING: '1' },
+    });
+
+    let stderr = '';
+    let stdout = '';
+    let lineBuffer = '';
+
+    modelDownloadProcess.stdout.on('data', chunk => {
+      stdout += chunk.toString('utf8');
+      if (stdout.length > 100_000) stdout = stdout.slice(-100_000);
+    });
+
+    modelDownloadProcess.stderr.on('data', chunk => {
+      const text = chunk.toString('utf8');
+      stderr += text;
+      if (stderr.length > 500_000) stderr = stderr.slice(-500_000);
+      lineBuffer += text;
+      const lines = lineBuffer.split(/\r?\n/);
+      lineBuffer = lines.pop() || '';
+      for (const line of lines) {
+        const value = line.trim();
+        if (!value) continue;
+        try {
+          const event = JSON.parse(value);
+          emitModelProgress(event);
+        } catch {
+          // Hugging Face prints progress bars to stderr. Keep the UI indeterminate
+          // and expose only a short sanitized status message.
+          const cleaned = value.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '').slice(-240);
+          if (cleaned) emitModelProgress({ stage: 'downloading', message: cleaned });
+        }
+      }
+    });
+
+    modelDownloadProcess.on('error', error => {
+      modelDownloadProcess = null;
+      emitModelProgress({ stage: 'error', message: error.message });
+      reject(error);
+    });
+
+    modelDownloadProcess.on('close', code => {
+      modelDownloadProcess = null;
+      if (code === 0 && modelReady(userModelPath())) {
+        const status = modelStatus();
+        emitModelProgress({ stage: 'complete', message: 'large-v3 모델 설치가 완료되었습니다.', status });
+        resolve(status);
+      } else {
+        const message = `모델 설치에 실패했습니다. 종료 코드 ${code}.\n${stderr.slice(-8000) || stdout.slice(-3000)}`;
+        emitModelProgress({ stage: 'error', message });
+        reject(new Error(message));
+      }
+    });
+  });
 }
 
 function reservePort() {
@@ -56,8 +190,6 @@ function startBackend(port) {
   const runtime = runtimeRoot();
   const serverFile = path.join(root, 'server.mjs');
   const shimFile = path.join(root, 'scripts', 'local-fetch-shim.mjs');
-  const transcriber = path.join(runtime, 'transcriber', 'ade-transcriber.exe');
-  const whisperModel = path.join(runtime, 'models', 'faster-whisper-large-v3');
 
   const args = ['--import', shimFile, serverFile];
   const env = {
@@ -67,8 +199,8 @@ function startBackend(port) {
     ADE_RESOURCE_ROOT: process.resourcesPath,
     ADE_RUNTIME_ROOT: runtime,
     ADE_USER_DATA: app.getPath('userData'),
-    ADE_TRANSCRIBER_EXE: transcriber,
-    ADE_WHISPER_MODEL: whisperModel,
+    ADE_TRANSCRIBER_EXE: transcriberPath(),
+    ADE_WHISPER_MODEL: installedModelPath(),
     DEFAULT_PROVIDER: 'local',
     PORT: String(port),
   };
@@ -92,6 +224,11 @@ function stopBackend() {
   if (!serverProcess) return;
   serverProcess.kill();
   serverProcess = null;
+}
+
+function registerDesktopHandlers() {
+  ipcMain.handle('ade:model-status', () => modelStatus());
+  ipcMain.handle('ade:model-download', () => downloadModel());
 }
 
 async function createWindow() {
@@ -137,7 +274,10 @@ if (!hasLock) {
     mainWindow.focus();
   });
 
-  app.whenReady().then(createWindow).catch(async error => {
+  app.whenReady().then(async () => {
+    registerDesktopHandlers();
+    await createWindow();
+  }).catch(error => {
     console.error(error);
     dialog.showErrorBox(
       'ADE 실행 오류',
@@ -148,4 +288,7 @@ if (!hasLock) {
 }
 
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', stopBackend);
+app.on('before-quit', () => {
+  stopBackend();
+  if (modelDownloadProcess) modelDownloadProcess.kill();
+});
