@@ -6,6 +6,7 @@
   const nativeFetch = window.fetch.bind(window);
   let originalAudioFile = null;
   let localEvaluationReady = false;
+  let removeProgressListener = null;
 
   function participantSummary() {
     return [...document.querySelectorAll('.person')]
@@ -31,6 +32,14 @@
     return parts.filter(Boolean).join(' ');
   }
 
+  function showToast(message, duration = 5000) {
+    const toast = document.querySelector('#toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), duration);
+  }
+
   function installFileCapture() {
     const input = document.querySelector('#file');
     if (!input) return;
@@ -47,23 +56,66 @@
       if (provider === 'local' && !localEvaluationReady) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        const toast = document.querySelector('#toast');
-        if (toast) {
-          toast.textContent = '설치형 전사 엔진은 준비되었습니다. 로컬 평가 엔진은 다음 개발 단계에서 프로그램에 내장됩니다.';
-          toast.classList.remove('hidden');
-          setTimeout(() => toast.classList.add('hidden'), 5000);
-        }
+        showToast('설치형 전사 엔진은 준비되었습니다. 로컬 평가 엔진은 다음 개발 단계에서 프로그램에 내장됩니다.');
       }
     }, true);
   }
 
+  function modelManagerMarkup(status) {
+    if (!status.engineInstalled) {
+      return '<b>전사 엔진 오류</b><span>설치 파일에 전사 엔진이 없습니다. ADE를 다시 설치해 주세요.</span>';
+    }
+    if (status.modelInstalled) {
+      return '<b>설치형 오프라인 모드 준비됨</b><span>Faster-Whisper large-v3 모델이 설치되어 있습니다. 원본 음성 파일을 로컬에서 직접 전사합니다.</span><span class="modelReady">● 모델 준비 완료</span>';
+    }
+    return '<b>large-v3 모델 설치 필요</b><span>최초 한 번 약 3GB의 전사 모델을 설치합니다. 완료 후에는 인터넷 없이 전사할 수 있습니다.</span><button id="installModel" class="primary" type="button">전사 모델 설치</button><span id="modelProgress" class="modelProgress">설치 전</span>';
+  }
+
+  async function refreshModelManager() {
+    const guide = document.querySelector('#localGuide');
+    if (!guide || typeof window.ADEDesktop.modelStatus !== 'function') return;
+
+    try {
+      const status = await window.ADEDesktop.modelStatus();
+      guide.innerHTML = modelManagerMarkup(status);
+      const button = document.querySelector('#installModel');
+      if (!button) return;
+
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = '모델 설치 중…';
+        const progress = document.querySelector('#modelProgress');
+        if (progress) progress.textContent = '다운로드를 준비하고 있습니다.';
+        try {
+          await window.ADEDesktop.downloadModel();
+          if (progress) progress.textContent = '설치 완료. 프로그램을 새로 고칩니다.';
+          showToast('large-v3 모델 설치가 완료되었습니다.');
+          setTimeout(() => window.location.reload(), 1000);
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = '전사 모델 다시 설치';
+          if (progress) progress.textContent = error.message || '모델 설치 실패';
+          showToast(error.message || '모델 설치에 실패했습니다.', 8000);
+        }
+      });
+    } catch (error) {
+      guide.innerHTML = `<b>모델 상태 확인 실패</b><span>${String(error.message || error)}</span>`;
+    }
+  }
+
+  function installModelProgress() {
+    if (typeof window.ADEDesktop.onModelProgress !== 'function') return;
+    removeProgressListener = window.ADEDesktop.onModelProgress(event => {
+      const progress = document.querySelector('#modelProgress');
+      if (!progress) return;
+      const message = event?.message || event?.stage || '모델 설치 중';
+      progress.textContent = String(message).replace(/\s+/g, ' ').slice(-260);
+    });
+    window.addEventListener('beforeunload', () => removeProgressListener?.(), { once: true });
+  }
+
   function decorateDesktop() {
     document.documentElement.classList.add('ade-desktop');
-    const guide = document.querySelector('#localGuide');
-    if (guide) {
-      guide.innerHTML = '<b>설치형 오프라인 모드</b><span>원본 음성 파일을 Faster-Whisper large-v3 엔진으로 직접 처리합니다. 브라우저 WAV 재변환과 PowerShell 실행이 필요하지 않습니다.</span>';
-    }
-
     const hero = document.querySelector('.hero');
     if (hero && !document.querySelector('#desktopBadge')) {
       const badge = document.createElement('div');
@@ -129,5 +181,7 @@
 
   installFileCapture();
   installEvaluationGuard();
+  installModelProgress();
   decorateDesktop();
+  refreshModelManager();
 })();
