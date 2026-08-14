@@ -2,6 +2,12 @@ name: Build ADE Desktop
 
 on:
   workflow_dispatch:
+    inputs:
+      include_model_pack:
+        description: "Also download and upload the 3.1GB Faster-Whisper large-v3 model pack"
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - desktop-app
@@ -10,6 +16,7 @@ on:
       - "public/**"
       - "config/**"
       - "scripts/**"
+      - "runtime/**"
       - "server.mjs"
       - "package.json"
       - "electron-builder.yml"
@@ -19,9 +26,9 @@ permissions:
   contents: read
 
 jobs:
-  windows:
+  windows-engine:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -33,21 +40,65 @@ jobs:
           node-version: "24"
           cache: npm
 
-      - name: Install dependencies
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: desktop/transcriber/requirements-build.txt
+
+      - name: Install Node dependencies
         run: npm install
 
-      - name: Validate sources
+      - name: Validate JavaScript sources
         run: npm run check
+
+      - name: Validate Python sources
+        run: |
+          python -m py_compile desktop/transcriber/ade_transcriber.py
+          python -m py_compile desktop/transcriber/download_model.py
+
+      - name: Build standalone Faster-Whisper worker
+        shell: powershell
+        run: .\scripts\desktop\build-transcriber.ps1
 
       - name: Build Windows installer and portable app
         run: npm run dist:desktop
 
-      - name: Upload thin desktop build
+      - name: Upload ADE desktop engine build
         uses: actions/upload-artifact@v4
         with:
-          name: ADE-Desktop-thin
+          name: ADE-Desktop-engine
           path: |
             dist-desktop/*.exe
             dist-desktop/*.yml
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
+
+  model-pack:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_model_pack }}
+    runs-on: windows-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Download Faster-Whisper large-v3 model pack
+        shell: powershell
+        run: .\scripts\desktop\download-model-pack.ps1
+
+      - name: Upload large-v3 model pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: ADE-ModelPack-faster-whisper-large-v3
+          path: runtime/models/faster-whisper-large-v3/**
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
