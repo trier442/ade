@@ -182,14 +182,15 @@ globalThis.fetch = async function adeDesktopFetch(input, init = {}) {
 
   const runtime = resolveRuntime();
   if (url.pathname === '/' && String(init.method || 'GET').toUpperCase() === 'GET') {
+    const ready = Boolean(runtime.executable && runtime.model);
     return response({
-      ok: Boolean(runtime.executable && runtime.model),
+      ok: ready,
       service: 'ade-faster-whisper-worker',
       executable: runtime.executable,
       model: runtime.model,
       engineInstalled: Boolean(runtime.executable),
       modelInstalled: Boolean(runtime.model),
-    });
+    }, ready ? 200 : 503);
   }
 
   if (url.pathname === '/inference' && String(init.method || 'GET').toUpperCase() === 'POST') {
