@@ -2,6 +2,11 @@
 .env.*
 !.env.example
 .local-tools/
+.build/
+dist-desktop/
+runtime/transcriber/
+runtime/models/
+!runtime/README.md
 .DS_Store
 node_modules/
 npm-debug.log*
